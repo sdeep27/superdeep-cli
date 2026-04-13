@@ -251,17 +251,25 @@ export function ResearchAgent({ onBack }: Props) {
   }
 
   async function runCoordinator(absDir: string, runSlug: string) {
+    const handle = startCoordinator({ model: model!, runDir: absDir, slug: runSlug });
     try {
-      const handle = startCoordinator({ model: model!, runDir: absDir, slug: runSlug });
       for await (const evt of handle.events) {
         renderEvent(evt, pushFeed);
       }
-      setPhase("done");
     } catch (err) {
       pushFeed(
         "error: " + (err instanceof Error ? err.message : String(err)),
         "error",
       );
+    } finally {
+      try {
+        await handle.shutdown();
+      } catch (err) {
+        pushFeed(
+          "trace shutdown error: " + (err instanceof Error ? err.message : String(err)),
+          "warn",
+        );
+      }
       setPhase("done");
     }
   }

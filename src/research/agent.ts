@@ -10,6 +10,7 @@ import {
 import { now, type AgentEvent } from "./events.js";
 import type { Logger } from "./logger.js";
 import type { RunState } from "./state.js";
+import type { RunTrace } from "./trace.js";
 import type { ToolRuntime } from "./tools/runtime.js";
 import type { ToolExecCtx } from "./tools/types.js";
 import { extractSourcesFromMessage } from "./tools/web-search.js";
@@ -23,6 +24,7 @@ export interface RunAgentOptions {
   streamOptions?: SimpleStreamOptions;
   spawnSubagent: ToolExecCtx["spawnSubagent"];
   signal?: AbortSignal;
+  runTrace?: RunTrace;
 }
 
 /**
@@ -31,8 +33,17 @@ export interface RunAgentOptions {
  * so the caller can persist the final transcript.
  */
 export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEvent> {
-  const { model, state, runtime, logger, context, streamOptions, spawnSubagent, signal } =
-    opts;
+  const {
+    model,
+    state,
+    runtime,
+    logger,
+    context,
+    streamOptions,
+    spawnSubagent,
+    signal,
+    runTrace,
+  } = opts;
 
   const pending: AgentEvent[] = [];
   const emit = (event: AgentEvent) => {
@@ -42,13 +53,6 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
 
   const drain = function* (): Generator<AgentEvent> {
     while (pending.length) yield pending.shift()!;
-  };
-
-  const toolCtx: ToolExecCtx = {
-    state,
-    logger,
-    emit,
-    spawnSubagent,
   };
 
   // Make sure tools from runtime are attached to the context.
@@ -64,6 +68,7 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
         reason: trip,
         at: now(),
       });
+      runTrace?.logBudgetWarn(trip);
       yield* drain();
       emit({
         type: "done",
@@ -86,6 +91,23 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
       at: now(),
     });
     yield* drain();
+
+    const messagesSnapshot: Message[] = [...context.messages];
+    const stepStartTime = new Date();
+    const stepTrace = runTrace?.startStep({
+      stepNumber,
+      modelId: model.id,
+      messages: messagesSnapshot,
+      systemPrompt: context.systemPrompt,
+    });
+
+    const toolCtx: ToolExecCtx = {
+      state,
+      logger,
+      emit,
+      spawnSubagent,
+      stepTrace,
+    };
 
     let finalMessage: Message | null = null;
     let stopReason: "stop" | "length" | "toolUse" | "error" | "aborted" = "stop";
@@ -131,6 +153,8 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
         message,
         at: now(),
       });
+      runTrace?.logError(message);
+      stepTrace?.end();
       yield* drain();
       emit({
         type: "done",
@@ -144,13 +168,16 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
     }
 
     if (!finalMessage || finalMessage.role !== "assistant") {
+      const msg = "stream ended without assistant message";
       emit({
         type: "error",
         role: state.role,
         depth: state.depth,
-        message: "stream ended without assistant message",
+        message: msg,
         at: now(),
       });
+      runTrace?.logError(msg);
+      stepTrace?.end();
       yield* drain();
       emit({
         type: "done",
@@ -166,6 +193,14 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
     state.addUsage(finalMessage.usage);
     extractSourcesFromMessage(finalMessage, state);
     context.messages.push(finalMessage);
+
+    stepTrace?.endGeneration({
+      finalMessage,
+      usage: finalMessage.usage,
+      stopReason,
+      modelId: model.id,
+      startTime: stepStartTime,
+    });
 
     emit({
       type: "assistant_message_done",
@@ -183,9 +218,11 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
       const results = await runtime.execute(toolCalls, toolCtx);
       yield* drain();
       for (const r of results) context.messages.push(r);
+      stepTrace?.end();
       continue;
     }
 
+    stepTrace?.end();
     emit({
       type: "done",
       role: state.role,

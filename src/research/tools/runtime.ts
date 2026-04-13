@@ -86,6 +86,11 @@ export class ToolRuntime {
       at: now(),
     });
 
+    const toolTrace = ctx.stepTrace?.startTool(call, {
+      concurrent: !!reg?.concurrent,
+    });
+    const toolCtx: ToolExecCtx = { ...ctx, toolTrace };
+
     let args = { ...call.arguments } as Record<string, unknown>;
     let result: ToolHandlerResult;
 
@@ -97,7 +102,7 @@ export class ToolRuntime {
         const preChain = [...this.globalPre, ...(reg.preHooks ?? [])];
         let vetoed: string | undefined;
         for (const h of preChain) {
-          const r = await h(call.name, args, ctx);
+          const r = await h(call.name, args, toolCtx);
           if (r && typeof r === "object" && "veto" in r) {
             vetoed = (r as { veto: string }).veto;
             break;
@@ -108,10 +113,10 @@ export class ToolRuntime {
         if (vetoed) {
           result = { content: `Tool vetoed: ${vetoed}`, isError: true };
         } else {
-          result = await reg.handler(args, ctx);
+          result = await reg.handler(args, toolCtx);
           const postChain = [...(reg.postHooks ?? []), ...this.globalPost];
           for (const h of postChain) {
-            const r = await h(call.name, args, result, ctx);
+            const r = await h(call.name, args, result, toolCtx);
             if (r) result = r;
           }
         }
@@ -120,6 +125,12 @@ export class ToolRuntime {
         result = { content: `Tool error: ${msg}`, isError: true };
       }
     }
+
+    toolTrace?.end({
+      content: result.content,
+      isError: result.isError === true,
+      details: result.details,
+    });
 
     ctx.emit({
       type: "tool_call_result",

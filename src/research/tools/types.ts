@@ -2,6 +2,7 @@ import type { Static, TSchema, Tool, ToolResultMessage } from "@mariozechner/pi-
 import type { AgentEvent } from "../events.js";
 import type { RunState } from "../state.js";
 import type { Logger } from "../logger.js";
+import type { StepTrace, ToolTrace } from "../trace.js";
 
 export interface SpawnSubagentArgs {
   taskTitle: string;
@@ -20,6 +21,8 @@ export interface ToolExecCtx {
   logger: Logger;
   emit: (event: AgentEvent) => void;
   spawnSubagent: (args: SpawnSubagentArgs, parent: ToolExecCtx) => Promise<SpawnSubagentResult>;
+  stepTrace?: StepTrace;
+  toolTrace?: ToolTrace;
 }
 
 export interface ToolHandlerResult {

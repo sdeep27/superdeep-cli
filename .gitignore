@@ -23,3 +23,12 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Research agent output (per-run knowledge bases)
+research/
+
+# Langfuse docker-compose is pulled from LF's repo via README; don't vendor it
+langfuse/docker-compose.yml
+
+# Claude Code local session state
+.claude/

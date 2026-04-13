@@ -5,8 +5,16 @@ import os from "node:os";
 const CONFIG_DIR = path.join(os.homedir(), ".superdeep");
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
 
+export interface LangfuseConfig {
+  enabled?: boolean;
+  host?: string;
+  publicKey?: string;
+  secretKey?: string;
+}
+
 export interface SuperdeepConfig {
   apiKeys: Record<string, string>;
+  langfuse?: LangfuseConfig;
 }
 
 const DEFAULT_CONFIG: SuperdeepConfig = {
@@ -75,4 +83,29 @@ export function loadKeysIntoEnv(): void {
 export function getConfiguredProviders(): string[] {
   const config = loadConfig();
   return Object.keys(config.apiKeys).filter((p) => config.apiKeys[p]);
+}
+
+/**
+ * Resolve Langfuse settings. Env vars (LANGFUSE_HOST / LANGFUSE_PUBLIC_KEY /
+ * LANGFUSE_SECRET_KEY) override config.json. Returns `null` if anything
+ * required is missing.
+ */
+export function resolveLangfuseConfig(): {
+  host: string;
+  publicKey: string;
+  secretKey: string;
+} | null {
+  const cfg = loadConfig().langfuse ?? {};
+  if (cfg.enabled === false) return null;
+  const host = process.env.LANGFUSE_HOST ?? cfg.host;
+  const publicKey = process.env.LANGFUSE_PUBLIC_KEY ?? cfg.publicKey;
+  const secretKey = process.env.LANGFUSE_SECRET_KEY ?? cfg.secretKey;
+  if (!host || !publicKey || !secretKey) return null;
+  return { host, publicKey, secretKey };
+}
+
+export function setLangfuseConfig(patch: LangfuseConfig): void {
+  const config = loadConfig();
+  config.langfuse = { ...(config.langfuse ?? {}), ...patch };
+  saveConfig(config);
 }

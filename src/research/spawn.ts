@@ -73,6 +73,13 @@ export function makeSpawnSubagent(deps: SpawnFactoryDeps) {
       tools: runtime.toolList(),
     };
 
+    const childRunTrace = parent.toolTrace?.startSubagentRun({
+      name: `subagent:${args.taskTitle}`,
+      slug: subagentId,
+      input: args.taskPrompt,
+      metadata: { scope: args.scope },
+    });
+
     const gen = runAgent({
       model,
       state: childState,
@@ -82,6 +89,7 @@ export function makeSpawnSubagent(deps: SpawnFactoryDeps) {
       streamOptions,
       spawnSubagent,
       signal,
+      runTrace: childRunTrace,
     });
 
     for await (const event of gen) {
@@ -104,6 +112,13 @@ export function makeSpawnSubagent(deps: SpawnFactoryDeps) {
       childContext.messages.map((m) => JSON.stringify(m)).join("\n") + "\n",
       "utf-8",
     );
+
+    childRunTrace?.end({
+      reason: "stop",
+      tokens: childState.tokens,
+      sourcesCount: childState.sources.length,
+      summary: truncate(summary, 2000),
+    });
 
     parent.emit({
       type: "subagent_done",
