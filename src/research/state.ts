@@ -25,6 +25,8 @@ export interface RunStateInit {
   budgets?: Partial<Budgets>;
   permissions?: Permissions;
   sources?: Source[];
+  loopsUsed?: number;
+  tokens?: { input: number; output: number; cacheRead: number; cost: number };
 }
 
 export class RunState {
@@ -45,6 +47,8 @@ export class RunState {
     this.budgets = { ...DEFAULT_BUDGETS, ...(init.budgets ?? {}) };
     this.permissions = init.permissions ?? {};
     this.sources = init.sources ?? [];
+    if (typeof init.loopsUsed === "number") this.loopsUsed = init.loopsUsed;
+    if (init.tokens) this.tokens = { ...init.tokens };
   }
 
   addUsage(u: Usage): void {

@@ -5,8 +5,9 @@ import { MainMenu } from "./components/MainMenu.js";
 import { Chat } from "./components/Chat.js";
 import { ApiKeyConfig } from "./components/ApiKeyConfig.js";
 import { ResearchAgent } from "./components/ResearchAgent.js";
+import { ResumePicker } from "./components/ResumePicker.js";
 
-export type Screen = "menu" | "chat" | "config" | "research";
+export type Screen = "menu" | "chat" | "config" | "research" | "resume";
 
 export function App() {
   const [screen, setScreen] = useState<Screen>("menu");
@@ -21,6 +22,9 @@ export function App() {
       )}
       {screen === "research" && (
         <ResearchAgent onBack={() => setScreen("menu")} />
+      )}
+      {screen === "resume" && (
+        <ResumePicker onBack={() => setScreen("menu")} />
       )}
     </Box>
   );

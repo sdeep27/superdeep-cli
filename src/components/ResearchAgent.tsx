@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import SelectInput from "ink-select-input";
 import TextInput from "ink-text-input";
@@ -14,8 +14,7 @@ import {
   type MissionFields,
 } from "../research/mission.js";
 import { createRunFolder } from "../research/run.js";
-import { startCoordinator } from "../research/plan.js";
-import type { AgentEvent } from "../research/events.js";
+import { ResearchRunning, type FeedItem } from "./ResearchRunning.js";
 
 interface Props {
   onBack: () => void;
@@ -27,14 +26,7 @@ type Phase =
   | "answering"
   | "finalizing"
   | "approve"
-  | "running"
-  | "done";
-
-interface FeedItem {
-  id: number;
-  line: string;
-  tone?: "info" | "tool" | "file" | "sub" | "warn" | "error";
-}
+  | "running";
 
 export function ResearchAgent({ onBack }: Props) {
   const apiKey = getApiKey("anthropic");
@@ -56,19 +48,11 @@ export function ResearchAgent({ onBack }: Props) {
   const [mission, setMission] = useState<MissionFields | null>(null);
   const [runDir, setRunDir] = useState<string | null>(null);
   const [slug, setSlug] = useState<string | null>(null);
-
-  const [feed, setFeed] = useState<FeedItem[]>([]);
-  const feedCounter = useRef(0);
-  const pushFeed = (line: string, tone: FeedItem["tone"] = "info") => {
-    feedCounter.current += 1;
-    setFeed((f) => {
-      const next = [...f, { id: feedCounter.current, line, tone }];
-      return next.length > 200 ? next.slice(-200) : next;
-    });
-  };
+  const [initialFeed, setInitialFeed] = useState<FeedItem[]>([]);
+  const [runFinished, setRunFinished] = useState(false);
 
   useInput((_, key) => {
-    if (key.escape && phase !== "running") onBack();
+    if (key.escape && (phase !== "running" || runFinished)) onBack();
   });
 
   if (!apiKey || !model) {
@@ -222,9 +206,14 @@ export function ResearchAgent({ onBack }: Props) {
         setSlug(folder.slug);
         setRunDir(folder.absDir);
         writeMissionFile(folder.absDir, mission);
-        pushFeed(`Mission.md written to ./research/${folder.slug}/`, "file");
+        setInitialFeed([
+          {
+            id: crypto.randomUUID(),
+            line: `Mission.md written to ./research/${folder.slug}/`,
+            tone: "file",
+          },
+        ]);
         setPhase("running");
-        runCoordinator(folder.absDir, folder.slug);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       }
@@ -250,138 +239,18 @@ export function ResearchAgent({ onBack }: Props) {
     );
   }
 
-  async function runCoordinator(absDir: string, runSlug: string) {
-    const handle = startCoordinator({ model: model!, runDir: absDir, slug: runSlug });
-    try {
-      for await (const evt of handle.events) {
-        renderEvent(evt, pushFeed);
-      }
-    } catch (err) {
-      pushFeed(
-        "error: " + (err instanceof Error ? err.message : String(err)),
-        "error",
-      );
-    } finally {
-      try {
-        await handle.shutdown();
-      } catch (err) {
-        pushFeed(
-          "trace shutdown error: " + (err instanceof Error ? err.message : String(err)),
-          "warn",
-        );
-      }
-      setPhase("done");
-    }
+  // === PHASE: running ===
+  if (phase === "running" && runDir && slug) {
+    return (
+      <ResearchRunning
+        model={model}
+        runDir={runDir}
+        slug={slug}
+        initialFeed={initialFeed}
+        onDone={() => setRunFinished(true)}
+      />
+    );
   }
 
-  // === PHASE: running / done ===
-  return (
-    <Box flexDirection="column">
-      <Text bold color="cyan">
-        {"  "}
-        {phase === "running" ? "Researching…" : "Done."}
-      </Text>
-      {slug && <Text dimColor>{"  ./research/" + slug + "/"}</Text>}
-      <Box flexDirection="column" marginTop={1}>
-        {feed.slice(-40).map((item) => (
-          <Text key={item.id} color={toneColor(item.tone)}>
-            {"  "}
-            {item.line}
-          </Text>
-        ))}
-      </Box>
-      {phase === "running" && (
-        <Text>
-          {"  "}
-          <Text color="cyan">
-            <Spinner type="dots" />
-          </Text>
-          {"  working…"}
-        </Text>
-      )}
-      {phase === "done" && (
-        <Text dimColor>{"  Press ESC to return to the menu."}</Text>
-      )}
-    </Box>
-  );
-}
-
-function toneColor(tone: FeedItem["tone"]): string | undefined {
-  switch (tone) {
-    case "tool":
-      return "blue";
-    case "file":
-      return "green";
-    case "sub":
-      return "magenta";
-    case "warn":
-      return "yellow";
-    case "error":
-      return "red";
-    default:
-      return undefined;
-  }
-}
-
-function renderEvent(
-  evt: AgentEvent,
-  push: (line: string, tone?: FeedItem["tone"]) => void,
-): void {
-  switch (evt.type) {
-    case "step_start":
-      push(`» step ${evt.step} (${evt.role})`, "info");
-      break;
-    case "tool_call_start":
-      push(`  ↳ ${evt.call.name}(${summarizeArgs(evt.call.arguments)})`, "tool");
-      break;
-    case "tool_call_result":
-      push(
-        `  ✓ ${evt.toolName}${evt.isError ? " [error]" : ""} — ${evt.summary}`,
-        evt.isError ? "error" : "tool",
-      );
-      break;
-    case "file_written":
-      push(`  + ${evt.path} (${evt.bytes}b)`, "file");
-      break;
-    case "source_cited":
-      push(`  · source ${evt.source.url}`, "info");
-      break;
-    case "subagent_spawn":
-      push(`★ subagent spawn: ${evt.title} (${evt.subagentId})`, "sub");
-      break;
-    case "subagent_event":
-      // Pretty-print child events with a prefix
-      renderEvent(evt.event, (line, tone) => push("  │ " + line, tone ?? "sub"));
-      break;
-    case "subagent_done":
-      push(`★ subagent done: ${evt.subagentId}`, "sub");
-      break;
-    case "budget_warn":
-      push(`⚠ budget hit: ${evt.reason}`, "warn");
-      break;
-    case "error":
-      push(`error: ${evt.message}`, "error");
-      break;
-    case "assistant_message_done":
-      push(
-        `  · assistant (in=${evt.usage.input} out=${evt.usage.output} $${evt.usage.cost.total.toFixed(4)})`,
-      );
-      break;
-    case "done":
-      push(`— done (${evt.reason})`, "info");
-      break;
-    default:
-      // text_delta, thinking_delta — too noisy for the feed; they live in run.log.
-      break;
-  }
-}
-
-function summarizeArgs(args: Record<string, unknown>): string {
-  const entries = Object.entries(args).slice(0, 2);
-  return entries
-    .map(([k, v]) => {
-      const s = typeof v === "string" ? v : JSON.stringify(v);
-      return `${k}=${s.length > 40 ? s.slice(0, 37) + "…" : s}`;
-    })
-    .join(", ");
+  return null;
 }

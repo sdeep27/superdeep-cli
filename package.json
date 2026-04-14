@@ -23,6 +23,7 @@
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^6.0.0",
     "langfuse": "^3.38.20",
+    "minimatch": "^10.2.5",
     "react": "^19.2.5",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2"

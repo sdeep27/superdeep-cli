@@ -85,16 +85,89 @@ export const updateMarkdownTool: RegisteredTool<typeof UpdateParams> = {
 export const readMarkdownTool: RegisteredTool<typeof ReadParams> = {
   tool: {
     name: "read_markdown",
-    description: "Read a markdown file from the current run folder.",
+    description:
+      "Read a markdown file from the current run folder. If the file does not exist, the error response includes a listing of the nearest existing directory and any similarly-named files in the run — use that to retry with a corrected path or call list_files / grep_files to discover what exists.",
     parameters: ReadParams,
   },
+  concurrent: true,
   handler: async ({ path: rel }, ctx) => {
     ensureMd(rel);
     const abs = resolveInRun(ctx.state.runDir, rel);
     if (!fs.existsSync(abs)) {
-      return { content: `file not found: ${rel}`, isError: true };
+      const hint = describeMissingPath(ctx.state.runDir, abs, rel);
+      return { content: hint, isError: true };
     }
     const text = fs.readFileSync(abs, "utf-8");
     return { content: text };
   },
 };
+
+function describeMissingPath(runDir: string, abs: string, rel: string): string {
+  const lines: string[] = [`file not found: ${rel}`];
+
+  let dir = path.dirname(abs);
+  while (!fs.existsSync(dir) && dir.startsWith(runDir) && dir !== runDir) {
+    dir = path.dirname(dir);
+  }
+  if (!fs.existsSync(dir)) dir = runDir;
+
+  const ancestorRel = path.relative(runDir, dir) || ".";
+  lines.push(`nearest existing directory: ${ancestorRel}/`);
+
+  try {
+    const entries = fs
+      .readdirSync(dir, { withFileTypes: true })
+      .map((d) => (d.isDirectory() ? `${d.name}/` : d.name))
+      .sort();
+    const shown = entries.slice(0, 40);
+    lines.push(`contents (${shown.length}${entries.length > 40 ? ` of ${entries.length}` : ""}):`);
+    for (const e of shown) lines.push(`  ${e}`);
+  } catch {
+    // ignore
+  }
+
+  const base = path.basename(rel);
+  if (base.length >= 4) {
+    const similar = findSimilarBasenames(runDir, base, 10);
+    if (similar.length > 0) {
+      lines.push(`similarly-named files elsewhere in the run:`);
+      for (const s of similar) lines.push(`  ${s}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function findSimilarBasenames(runDir: string, target: string, cap: number): string[] {
+  const targetLower = target.toLowerCase();
+  const targetStem = targetLower.replace(/\.md$/, "");
+  const hits: string[] = [];
+
+  const walk = (dir: string): void => {
+    if (hits.length >= cap) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (hits.length >= cap) return;
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        walk(full);
+      } else if (e.isFile() && e.name.toLowerCase().endsWith(".md")) {
+        const nameLower = e.name.toLowerCase();
+        if (
+          nameLower === targetLower ||
+          nameLower.includes(targetStem) ||
+          targetStem.includes(nameLower.replace(/\.md$/, ""))
+        ) {
+          hits.push(path.relative(runDir, full));
+        }
+      }
+    }
+  };
+  walk(runDir);
+  return hits;
+}

@@ -17,6 +17,7 @@ export function MainMenu({ onNavigate }: MainMenuProps) {
 
   const items = [
     { label: "Deep Research Agent", value: "research" as const },
+    { label: "Resume research run", value: "resume" as const },
     { label: "Chat", value: "chat" as const },
     { label: "Configure API keys", value: "config" as const },
     { label: "Exit", value: "exit" as const },
@@ -34,6 +35,10 @@ export function MainMenu({ onNavigate }: MainMenuProps) {
       case "research":
         if (!configured.includes("anthropic")) return;
         onNavigate("research");
+        break;
+      case "resume":
+        if (!configured.includes("anthropic")) return;
+        onNavigate("resume");
         break;
       case "exit":
         exit();

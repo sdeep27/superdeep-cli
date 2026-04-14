@@ -46,13 +46,39 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
   } = opts;
 
   const pending: AgentEvent[] = [];
+  let waker: (() => void) | null = null;
   const emit = (event: AgentEvent) => {
     logger.log(event);
     pending.push(event);
+    const w = waker;
+    waker = null;
+    w?.();
   };
 
   const drain = function* (): Generator<AgentEvent> {
     while (pending.length) yield pending.shift()!;
+  };
+
+  // Drain `pending` until `until` resolves, yielding events as they arrive.
+  // Used to surface subagent_event / file_written / etc. while a slow tool
+  // (e.g. spawn_subagent that runs an entire child loop) is in flight.
+  const drainUntil = async function* (
+    until: Promise<unknown>,
+  ): AsyncGenerator<AgentEvent> {
+    let settled = false;
+    until.finally(() => {
+      settled = true;
+      const w = waker;
+      waker = null;
+      w?.();
+    });
+    while (true) {
+      while (pending.length) yield pending.shift()!;
+      if (settled) return;
+      await new Promise<void>((resolve) => {
+        waker = resolve;
+      });
+    }
   };
 
   // Make sure tools from runtime are attached to the context.
@@ -215,7 +241,9 @@ export async function* runAgent(opts: RunAgentOptions): AsyncGenerator<AgentEven
       const toolCalls: ToolCall[] = finalMessage.content.filter(
         (c): c is ToolCall => c.type === "toolCall",
       );
-      const results = await runtime.execute(toolCalls, toolCtx);
+      const resultsP = runtime.execute(toolCalls, toolCtx);
+      yield* drainUntil(resultsP);
+      const results = await resultsP;
       yield* drain();
       for (const r of results) context.messages.push(r);
       stepTrace?.end();

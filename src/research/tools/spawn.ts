@@ -24,6 +24,7 @@ export const spawnSubagentTool: RegisteredTool<typeof SpawnParams> = {
       "Delegate a focused sub-task to a subagent. The subagent runs its own loop, writes its own markdown files under subagents/<id>/, and returns a summary. Use this to parallelize research across independent threads or to go deep on a single subtopic.",
     parameters: SpawnParams,
   },
+  concurrent: true,
   handler: async (args, ctx) => {
     const { summary, subagentId, findingsPath } = await ctx.spawnSubagent(
       {
