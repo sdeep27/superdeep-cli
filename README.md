@@ -1,6 +1,6 @@
 # superdeep-cli
 
-A deep research CLI where agents and subagents save their work as organized markdown files along the way — building a durable knowledge base, not just a single synthesis report. The knowledge base is structured so post-run agents (Socratic tutoring, quizzes, simpler concept breakdowns, charts) can consume it directly.
+A deep research CLI where agents and subagents save their work as organized markdown files along the way — building a durable knowledge base, not just a single synthesis report. The knowledge base is structured so post-run agents (code, quizzes, simpler concept breakdowns, charts) can consume it directly.
 
 Built on [Ink](https://github.com/vadimdemedes/ink) (React for the terminal) and [`@mariozechner/pi-ai`](https://www.npmjs.com/package/@mariozechner/pi-ai) for multi-provider LLM access.
 
