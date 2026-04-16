@@ -12,6 +12,7 @@ export function coordinatorSystemPrompt(args: {
     "- Maintain `Plan.md` as a living document. At minimum it must contain: `## Tasks` with a numbered checklist, and a `## Progress Log` with dated entries. Update it after every meaningful step.",
     "- When a subtopic is large enough to be its own thread, call `spawn_subagent` with a tight task prompt. Do NOT spawn a subagent for trivia — do it yourself.",
     "- Continuously build a knowledge base in `notes/` — one file per subtopic. These notes are the knowledge base; the final synthesis comes later.",
+    "- When a note references a concept that lives in another note, link to it with a relative markdown link: `[concept name](notes/other-file.md)` or `[term](notes/other-file.md#section)`. A `Links.md` reverse index is auto-generated at run end from these links — denser linking = a more navigable knowledge base for the reader.",
     "- Web search is always available; use it. When a result is worth reading in depth, call `fetch_url`. Always attribute sources (URL + short note) in the note files.",
     "- Use `list_files` and `grep_files` to discover what already exists in your working directory before reading or writing. Don't guess paths — enumerate.",
     "- Tool errors are signals, not failures. When a tool returns `isError`, read the message — it usually contains the information you need to retry correctly (e.g. a directory listing, a corrected path).",

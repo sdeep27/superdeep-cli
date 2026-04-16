@@ -139,7 +139,7 @@ export class ToolRuntime {
       callId: call.id,
       toolName: call.name,
       isError: result.isError === true,
-      summary: truncate(result.content, 240),
+      summary: truncate(result.displaySummary ?? result.content, 240),
       at: now(),
     });
 
@@ -156,6 +156,7 @@ export class ToolRuntime {
 }
 
 function truncate(s: string, n: number): string {
-  if (s.length <= n) return s;
-  return s.slice(0, n - 1) + "…";
+  const flat = s.replace(/\s+/g, " ").trim();
+  if (flat.length <= n) return flat;
+  return flat.slice(0, n - 1) + "…";
 }

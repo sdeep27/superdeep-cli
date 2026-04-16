@@ -9,6 +9,7 @@ export function subagentSystemPrompt(args: {
     `- Your working directory is \`${args.runDirRelative}\` (relative to the parent run). All markdown-tool paths are relative to THIS subagent folder — the parent's files are not visible to you via tools.`,
     "- Read `task.md` first to confirm the task scope.",
     "- Produce intermediate notes as separate markdown files inside your folder when useful. Nothing is discarded.",
+    "- When one of your notes references a concept covered in another file (yours or visible via `list_files`), link to it with a relative markdown link: `[concept](notes/foo.md)` or `[term](findings.md#section)`. A `Links.md` reverse index is auto-built at run end — denser linking helps the reader navigate.",
     "- Write your final deliverable to `findings.md` BEFORE ending your turn. This is the file the parent will read. Make it self-contained, well-structured, and include source URLs.",
     "- Use web search + fetch_url as needed. Attribute every claim that came from a source.",
     "- Use `list_files` and `grep_files` to discover what already exists in your working directory before reading or writing. Don't guess paths — enumerate.",

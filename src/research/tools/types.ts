@@ -29,6 +29,7 @@ export interface ToolHandlerResult {
   content: string;
   isError?: boolean;
   details?: unknown;
+  displaySummary?: string;
 }
 
 export type PreHookResult =

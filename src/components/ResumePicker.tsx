@@ -1,9 +1,8 @@
 import { useMemo, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import SelectInput from "ink-select-input";
-import { getModel } from "@mariozechner/pi-ai";
 import type { Api, Model } from "@mariozechner/pi-ai";
-import { getApiKey } from "../config.js";
+import { getConfiguredProviders } from "../config.js";
 import {
   annotateInterruptedSubagents,
   listRunFolders,
@@ -11,6 +10,7 @@ import {
   type RunFolderSummary,
 } from "../research/resume.js";
 import { ResearchRunning, type FeedItem } from "./ResearchRunning.js";
+import { ResearchModelPicker } from "./ResearchModelPicker.js";
 
 interface Props {
   onBack: () => void;
@@ -24,11 +24,7 @@ interface SelectedRun {
 }
 
 export function ResumePicker({ onBack }: Props) {
-  const apiKey = getApiKey("anthropic");
-  const model = useMemo<Model<Api> | null>(() => {
-    if (!apiKey) return null;
-    return getModel("anthropic", "claude-sonnet-4-6") as Model<Api>;
-  }, [apiKey]);
+  const hasAnyKey = getConfiguredProviders().length > 0;
 
   const runs = useMemo(() => listRunFolders(), []);
   const interrupted = useMemo(
@@ -37,24 +33,34 @@ export function ResumePicker({ onBack }: Props) {
   );
 
   const [selected, setSelected] = useState<SelectedRun | null>(null);
+  const [model, setModel] = useState<Model<Api> | null>(null);
   const [runFinished, setRunFinished] = useState(false);
 
   useInput((_, key) => {
     if (key.escape && (!selected || runFinished)) onBack();
   });
 
-  if (!apiKey || !model) {
+  if (!hasAnyKey) {
     return (
       <Box flexDirection="column">
         <Text color="yellow">
-          {"  Anthropic API key not configured. Set one in API Key config first."}
+          {"  No API keys configured. Set one in API Key config first."}
         </Text>
         <Text dimColor>{"  Press ESC to go back."}</Text>
       </Box>
     );
   }
 
-  if (selected) {
+  if (selected && !model) {
+    return (
+      <ResearchModelPicker
+        onBack={() => setSelected(null)}
+        onPick={setModel}
+      />
+    );
+  }
+
+  if (selected && model) {
     return (
       <ResearchRunning
         model={model}

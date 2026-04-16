@@ -6,6 +6,7 @@ import { runAgent } from "./agent.js";
 import type { AgentEvent } from "./events.js";
 import { createLangfuseSink } from "./langfuse.js";
 import { Logger } from "./logger.js";
+import { buildLinksIndex } from "./links.js";
 import { coordinatorSystemPrompt } from "./prompts/coordinator.js";
 import { makeSpawnSubagent } from "./spawn.js";
 import { RunState, type Budgets, type Permissions } from "./state.js";
@@ -173,6 +174,21 @@ async function* wrapForRunEnd(
     for await (const event of source) {
       if (event.type === "done" && event.depth === 0) {
         reason = event.reason;
+        try {
+          const result = buildLinksIndex(state.runDir);
+          if (result) {
+            yield {
+              type: "file_written",
+              role: state.role,
+              depth: state.depth,
+              path: result.path,
+              bytes: result.bytes,
+              at: Date.now(),
+            };
+          }
+        } catch {
+          // ignore — link index is best-effort
+        }
       }
       yield event;
     }

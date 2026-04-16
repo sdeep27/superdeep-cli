@@ -25,7 +25,7 @@ Thumbs.db
 npm-debug.log*
 
 # Research agent output (per-run knowledge bases)
-research/
+/research/
 
 # Langfuse docker-compose is pulled from LF's repo via README; don't vendor it
 langfuse/docker-compose.yml

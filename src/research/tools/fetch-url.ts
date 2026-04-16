@@ -73,18 +73,48 @@ export const fetchUrlTool: RegisteredTool<typeof FetchParams> = {
 
     const buf = Buffer.concat(chunks.map((c) => Buffer.from(c)));
     const raw = buf.toString("utf-8");
-    const text = contentType.includes("html") ? htmlToText(raw) : raw;
+    const isHtml = contentType.includes("html");
+    const text = isHtml ? htmlToText(raw) : raw;
+    const title = isHtml ? extractTitle(raw) : undefined;
     ctx.state.addSource({
       url,
       citedBy: `${ctx.state.role}:fetch_url`,
       at: now(),
     });
+    const host = safeHost(url);
+    const kb = Math.max(1, Math.round(received / 1024));
+    const displaySummary = title
+      ? `${title} · ${host} · ${kb}KB`
+      : `${host} · ${kb}KB`;
     return {
       content: text.slice(0, 20_000),
-      details: { url, status: res.status, bytes: received, contentType },
+      details: { url, status: res.status, bytes: received, contentType, title },
+      displaySummary,
     };
   },
 };
+
+function extractTitle(html: string): string | undefined {
+  const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (!m) return undefined;
+  const t = m[1]
+    .replace(/\s+/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .trim();
+  return t.length > 0 ? t.slice(0, 120) : undefined;
+}
+
+function safeHost(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url.slice(0, 40);
+  }
+}
 
 function htmlToText(html: string): string {
   return html

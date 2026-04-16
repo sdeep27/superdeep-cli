@@ -1,11 +1,10 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import SelectInput from "ink-select-input";
 import TextInput from "ink-text-input";
 import Spinner from "ink-spinner";
-import { getModel } from "@mariozechner/pi-ai";
 import type { Api, Model } from "@mariozechner/pi-ai";
-import { getApiKey } from "../config.js";
+import { getConfiguredProviders } from "../config.js";
 import {
   MissionClarifier,
   renderMissionMarkdown,
@@ -15,12 +14,14 @@ import {
 } from "../research/mission.js";
 import { createRunFolder } from "../research/run.js";
 import { ResearchRunning, type FeedItem } from "./ResearchRunning.js";
+import { ResearchModelPicker } from "./ResearchModelPicker.js";
 
 interface Props {
   onBack: () => void;
 }
 
 type Phase =
+  | "pickModel"
   | "prompt"
   | "clarifying"
   | "answering"
@@ -29,13 +30,10 @@ type Phase =
   | "running";
 
 export function ResearchAgent({ onBack }: Props) {
-  const apiKey = getApiKey("anthropic");
-  const model = useMemo<Model<Api> | null>(() => {
-    if (!apiKey) return null;
-    return getModel("anthropic", "claude-sonnet-4-6") as Model<Api>;
-  }, [apiKey]);
+  const hasAnyKey = getConfiguredProviders().length > 0;
+  const [model, setModel] = useState<Model<Api> | null>(null);
 
-  const [phase, setPhase] = useState<Phase>("prompt");
+  const [phase, setPhase] = useState<Phase>("pickModel");
   const [topic, setTopic] = useState("");
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -55,14 +53,26 @@ export function ResearchAgent({ onBack }: Props) {
     if (key.escape && (phase !== "running" || runFinished)) onBack();
   });
 
-  if (!apiKey || !model) {
+  if (!hasAnyKey) {
     return (
       <Box flexDirection="column">
         <Text color="yellow">
-          {"  Anthropic API key not configured. Set one in API Key config first."}
+          {"  No API keys configured. Set one in API Key config first."}
         </Text>
         <Text dimColor>{"  Press ESC to go back."}</Text>
       </Box>
+    );
+  }
+
+  if (phase === "pickModel" || !model) {
+    return (
+      <ResearchModelPicker
+        onBack={onBack}
+        onPick={(m) => {
+          setModel(m);
+          setPhase("prompt");
+        }}
+      />
     );
   }
 
